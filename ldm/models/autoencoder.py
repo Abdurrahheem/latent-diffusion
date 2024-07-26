@@ -27,9 +27,11 @@ class VQModel(pl.LightningModule):
                  lr_g_factor=1.0,
                  remap=None,
                  sane_index_shape=False, # tell vector quantizer to return indices as bhw
-                 use_ema=False
+                 use_ema=False,
+                 export=False,
                  ):
         super().__init__()
+        self.export = export
         self.embed_dim = embed_dim
         self.n_embed = n_embed
         self.image_key = image_key

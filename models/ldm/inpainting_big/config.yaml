@@ -2,6 +2,7 @@ model:
   base_learning_rate: 1.0e-06
   target: ldm.models.diffusion.ddpm.LatentDiffusion
   params:
+    export: False
     linear_start: 0.0015
     linear_end: 0.0205
     log_every_t: 100
@@ -25,6 +26,7 @@ model:
     unet_config:
       target: ldm.modules.diffusionmodules.openaimodel.UNetModel
       params:
+        export: False
         image_size: 64
         in_channels: 7
         out_channels: 3

@@ -13,6 +13,14 @@ from queue import Queue
 from inspect import isfunction
 from PIL import Image, ImageDraw, ImageFont
 
+def exportOnnx(model, input, names, verbose=False):
+    torch.onnx.export(
+        model,
+        input,
+        names["model_name"],
+        verbose=verbose,
+        input_names=names['input'],
+        output_names=names['output'])
 
 def log_txt_as_img(wh, xc, size=10):
     # wh a tuple of (width, height)

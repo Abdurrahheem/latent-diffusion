@@ -4,9 +4,23 @@ from PIL import Image
 from tqdm import tqdm
 import numpy as np
 import torch
-from main import instantiate_from_config
+import torch.nn as nn
+from ldm.util import instantiate_from_config, exportOnnx
 from ldm.models.diffusion.ddim import DDIMSampler
 
+class InpaintEncoder(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+    def forward(self, x):
+        return model.cond_stage_model.encode(x)
+
+class InpaintDecoder(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+    def forward(self, x):
+        return model.decode_first_stage(x)
 
 def make_batch(image, mask, device):
     image = np.array(Image.open(image).convert("RGB"))
@@ -50,18 +64,32 @@ if __name__ == "__main__":
         default=50,
         help="number of ddim sampling steps",
     )
+    parser.add_argument(
+        "--export",
+        type=bool,
+        default=False,
+        help="Export model to ONNX",
+    )
     opt = parser.parse_args()
 
     masks = sorted(glob.glob(os.path.join(opt.indir, "*_mask.png")))
+    if opt.export:
+        masks = [masks[1]]
     images = [x.replace("_mask.png", ".png") for x in masks]
     print(f"Found {len(masks)} inputs.")
 
     config = OmegaConf.load("models/ldm/inpainting_big/config.yaml")
+    if opt.export:
+        config.model.params.export = True
     model = instantiate_from_config(config.model)
     model.load_state_dict(torch.load("models/ldm/inpainting_big/last.ckpt")["state_dict"],
                           strict=False)
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    if opt.export:
+        model_enc = InpaintEncoder(model).to(device)
+        model_dec = InpaintDecoder(model).to(device)
+
     model = model.to(device)
     sampler = DDIMSampler(model)
 
@@ -73,7 +101,19 @@ if __name__ == "__main__":
                 batch = make_batch(image, mask, device=device)
 
                 # encode masked image and concat downsampled mask
-                c = model.cond_stage_model.encode(batch["masked_image"])
+                c = model_enc(batch["masked_image"])
+                if opt.export:
+                    exportOnnx(
+                        model_enc,
+                        batch["masked_image"],
+                        names=
+                        {
+                            "model_name" : "InpaintEncoder.onnx",
+                            "input" : ["x"],
+                            "output" : ["output"]
+                        }
+                    )
+
                 cc = torch.nn.functional.interpolate(batch["mask"],
                                                      size=c.shape[-2:])
                 c = torch.cat((c, cc), dim=1)
@@ -84,7 +124,18 @@ if __name__ == "__main__":
                                                  batch_size=c.shape[0],
                                                  shape=shape,
                                                  verbose=False)
-                x_samples_ddim = model.decode_first_stage(samples_ddim)
+                x_samples_ddim = model_dec(samples_ddim)
+                if opt.export:
+                    exportOnnx(
+                        model_dec,
+                        samples_ddim,
+                        names=
+                        {
+                            "model_name" : "InpaintDecoder.onnx",
+                            "input" : ["x"],
+                            "output" : ["output"]
+                        }
+                    )
 
                 image = torch.clamp((batch["image"]+1.0)/2.0,
                                     min=0.0, max=1.0)
