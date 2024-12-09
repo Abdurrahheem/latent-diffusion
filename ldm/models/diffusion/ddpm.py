@@ -1413,7 +1413,7 @@ class DiffusionWrapper(pl.LightningModule):
             if self.export and not self.exported:
                 exportOnnx(
                         self.diffusion_model,
-                        (xc, t),
+                        (xc, t.to(torch.int32)),
                         names=
                         {
                             "model_name" : "LatentDiffusion.onnx",
